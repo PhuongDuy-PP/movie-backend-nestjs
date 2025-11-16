@@ -10,6 +10,7 @@ import { BookingModule } from './booking/booking.module';
 import { CommentModule } from './comment/comment.module';
 import { BlogModule } from './blog/blog.module';
 import { DatabaseConfig } from './config/database.config';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { DatabaseConfig } from './config/database.config';
     CommentModule,
     BlogModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
 

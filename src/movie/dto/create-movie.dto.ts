@@ -52,4 +52,9 @@ export class CreateMovieDto {
   @IsOptional()
   @IsUrl()
   trailer?: string;
+
+  @ApiPropertyOptional({ example: 8.5, description: 'Movie rating (0-10)', required: false })
+  @IsOptional()
+  @IsNumber()
+  rating?: number;
 }

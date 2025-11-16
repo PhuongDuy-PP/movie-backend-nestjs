@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class UserService {
@@ -28,7 +30,7 @@ export class UserService {
 
     const user = this.userRepository.create({
       ...userData,
-      role: userData.role || 'user',
+      role: (userData.role || UserRole.USER) as UserRole,
       isActive: userData.isActive !== undefined ? userData.isActive : true,
     });
 
@@ -39,14 +41,14 @@ export class UserService {
 
   async findAll(): Promise<User[]> {
     return this.userRepository.find({
-      select: ['id', 'email', 'fullName', 'phone', 'role', 'isActive', 'createdAt', 'updatedAt'],
+      select: ['id', 'email', 'fullName', 'phone', 'avatar', 'role', 'isActive', 'createdAt', 'updatedAt'],
     });
   }
 
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: ['id', 'email', 'fullName', 'phone', 'role', 'isActive', 'createdAt', 'updatedAt'],
+      select: ['id', 'email', 'fullName', 'phone', 'avatar', 'role', 'isActive', 'createdAt', 'updatedAt'],
     });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -116,5 +118,24 @@ export class UserService {
       resetPasswordToken: null,
       resetPasswordExpires: null,
     });
+  }
+
+  async updateAvatar(id: string, avatarPath: string): Promise<User> {
+    const user = await this.findOne(id);
+    
+    // Xóa avatar cũ nếu có
+    if (user.avatar) {
+      const oldAvatarPath = path.join(process.cwd(), user.avatar);
+      if (fs.existsSync(oldAvatarPath)) {
+        try {
+          fs.unlinkSync(oldAvatarPath);
+        } catch (error) {
+          // Ignore error nếu file không tồn tại
+        }
+      }
+    }
+
+    await this.userRepository.update(id, { avatar: avatarPath });
+    return this.findOne(id);
   }
 }

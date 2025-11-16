@@ -1,0 +1,84 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Cho phép chạy thủ công từ GitHub Actions tab
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
+            cd backend-movie-nestjs || git clone ${{ secrets.REPO_URL }} backend-movie-nestjs && cd backend-movie-nestjs
+            git fetch origin
+            git reset --hard origin/main
+            git pull origin main
+            
+            # Kiểm tra Docker
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found, installing..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+            fi
+            
+            if ! command -v docker-compose &> /dev/null; then
+              echo "Docker Compose not found, installing..."
+              sudo apt update
+              sudo apt install docker-compose -y
+            fi
+            
+            # Kiểm tra .env file
+            if [ ! -f .env ]; then
+              echo ".env file not found, creating from template..."
+              cp env.example .env
+              echo "⚠️  Please configure .env file on server!"
+            fi
+            
+            # Build và deploy
+            echo "Building Docker images..."
+            docker-compose build
+            
+            echo "Stopping existing containers..."
+            docker-compose down
+            
+            echo "Starting containers..."
+            docker-compose up -d
+            
+            echo "Waiting for database..."
+            sleep 10
+            
+            echo "Running migrations..."
+            docker-compose run --rm backend npm run migration:run || echo "Migrations may have already run"
+            
+            echo "Cleaning up old images..."
+            docker system prune -f
+            
+            echo "Deployment completed!"
+          ENDSSH
+
+      - name: Health Check
+        run: |
+          sleep 10
+          curl -f http://${{ secrets.EC2_HOST }}:3000/health || echo "Health check failed"
+
